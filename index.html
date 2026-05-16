@@ -543,10 +543,35 @@ function renderRow(row) {
   tr.appendChild(tdAct);
 
   tr.appendChild(makeEditableCell(row.role, '역할', 'col-role', v => { row.role = v; touch(); }));
-  tr.appendChild(makeEditableCell(row.goal, '주간 목표', 'col-goal', v => { row.goal = v; touch(); }));
+  tr.appendChild(makeGoalCell(row));
 
   for (let i = 0; i < 7; i++) tr.appendChild(makeDayCell(row, i));
   return tr;
+}
+
+function makeGoalCell(row) {
+  const td = document.createElement('td');
+  td.className = 'col-goal';
+
+  const div = document.createElement('div');
+  div.className = 'editable';
+  div.contentEditable = 'true';
+  div.dataset.placeholder = '주간 목표';
+  div.textContent = row.goal || '';
+  div.addEventListener('blur', () => { row.goal = div.textContent.trim(); touch(); });
+  div.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); div.blur(); }
+    if (e.key === 'Escape') div.blur();
+  });
+  td.appendChild(div);
+
+  const addBtn = document.createElement('div');
+  addBtn.className = 'add-task';
+  addBtn.textContent = '+ 주간 목표 추가';
+  addBtn.onclick = () => addGoalAfter(row.id);
+  td.appendChild(addBtn);
+
+  return td;
 }
 
 function makeEditableCell(value, placeholder, cls, onSave) {
@@ -655,14 +680,20 @@ function addGoal() {
     alert('먼저 역할을 추가하세요.');
     return;
   }
-  const lastRole = rows[rows.length - 1].role || '';
+  addGoalAfter(rows[rows.length - 1].id);
+}
+
+function addGoalAfter(rowId) {
+  const rows = getCurrentRows();
+  const idx = rows.findIndex(r => r.id === rowId);
+  if (idx < 0) return;
   const newRow = {
     id: uuid(),
-    role: lastRole,
+    role: rows[idx].role || '',
     goal: '',
     tasks: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] }
   };
-  rows.push(newRow);
+  rows.splice(idx + 1, 0, newRow);
   touch();
   render();
   const tr = document.querySelector(`tr[data-row-id="${newRow.id}"]`);
