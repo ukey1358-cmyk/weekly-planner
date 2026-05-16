@@ -238,7 +238,7 @@
   <button class="btn" id="exportBtn">⬇ 내보내기</button>
   <button class="btn" id="importBtn">⬆ 가져오기</button>
   <button class="btn" id="reloadBtn" title="서버에서 새로고침">⟳ 새로고침</button>
-  <input type="file" id="importFile" accept=".json" style="display:none">
+  <input type="file" id="importFile" accept=".xlsx" style="display:none">
 </div>
 
 <div class="table-wrap">
@@ -263,6 +263,7 @@
 
 <div class="loading-overlay" id="loadingOverlay">불러오는 중...</div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 // =====================================================
 // 설정 — 본인의 Apps Script 웹앱 URL을 입력하세요
@@ -776,26 +777,74 @@ function gotoWeek(date) {
 }
 
 function exportData() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `weekly-planner-${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  if (typeof XLSX === 'undefined') {
+    alert('엑셀 라이브러리를 불러올 수 없습니다. 네트워크를 확인해주세요.');
+    return;
+  }
+  const dayNames = ['월','화','수','목','금','토','일'];
+  const data = [['주 시작일', '역할', '주간 목표', ...dayNames]];
+  const sortedKeys = Object.keys(state.weeks || {}).sort();
+  for (const wk of sortedKeys) {
+    const rows = state.weeks[wk] || [];
+    for (const r of rows) {
+      const cells = [wk, r.role || '', r.goal || ''];
+      for (let i = 0; i < 7; i++) {
+        const tasks = (r.tasks && r.tasks[i]) || [];
+        cells.push(tasks.map(t => (t.done ? '✓ ' : '☐ ') + (t.text || '')).join('\n'));
+      }
+      data.push(cells);
+    }
+  }
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:12},{wch:14},{wch:24},{wch:18},{wch:18},{wch:18},{wch:18},{wch:18},{wch:18},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, ws, '주간 계획');
+  XLSX.writeFile(wb, `weekly-planner-${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 function importData(file) {
+  if (typeof XLSX === 'undefined') {
+    alert('엑셀 라이브러리를 불러올 수 없습니다. 네트워크를 확인해주세요.');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
-      const data = JSON.parse(e.target.result);
-      if (!data || typeof data !== 'object' || !data.weeks) {
-        alert('잘못된 파일 형식입니다.');
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      if (!sheet) { alert('시트가 비어 있습니다.'); return; }
+      const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      const weekKeyRe = /^\d{4}-W\d{2}$/;
+      const weeks = {};
+      for (let i = 1; i < aoa.length; i++) {
+        const r = aoa[i];
+        if (!r || r.length === 0) continue;
+        const wk = String(r[0] || '').trim();
+        if (!weekKeyRe.test(wk)) continue;
+        const role = String(r[1] || '').trim();
+        const goal = String(r[2] || '').trim();
+        const tasks = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+        for (let d = 0; d < 7; d++) {
+          const cell = String(r[3 + d] || '');
+          if (!cell.trim()) continue;
+          for (const line of cell.split(/\r?\n/)) {
+            const t = line.trim();
+            if (!t) continue;
+            let done = false, text = t;
+            if (text.startsWith('✓')) { done = true; text = text.slice(1).trim(); }
+            else if (text.startsWith('☐')) { text = text.slice(1).trim(); }
+            tasks[d].push({ id: uuid(), text, done });
+          }
+        }
+        if (!weeks[wk]) weeks[wk] = [];
+        weeks[wk].push({ id: uuid(), role, goal, tasks });
+      }
+      if (Object.keys(weeks).length === 0) {
+        alert('가져올 데이터가 없습니다. 첫 컬럼이 "YYYY-Wnn" 형식의 주 키여야 합니다.');
         return;
       }
       if (!confirm('현재 데이터를 가져온 데이터로 덮어쓸까요? (시트도 함께 덮어씌워집니다)')) return;
-      state = { weeks: data.weeks, lastModified: Date.now() };
+      state = { weeks, lastModified: Date.now() };
       saveLocalCache();
       render();
       if (isConfigured()) {
@@ -808,7 +857,7 @@ function importData(file) {
       alert('파일 읽기 오류: ' + err.message);
     }
   };
-  reader.readAsText(file);
+  reader.readAsArrayBuffer(file);
 }
 
 function reloadFromServer() {
