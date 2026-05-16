@@ -776,7 +776,7 @@ function exportData() {
       const cells = [wk, r.role || '', r.goal || ''];
       for (let i = 0; i < 7; i++) {
         const tasks = (r.tasks && r.tasks[i]) || [];
-        cells.push(tasks.map(t => (t.done ? '✓ ' : '☐ ') + (t.text || '')).join('\n'));
+        cells.push(tasks.map(t => t.text || '').join('\n'));
       }
       data.push(cells);
     }
@@ -814,12 +814,10 @@ function importData(file) {
           const cell = String(r[3 + d] || '');
           if (!cell.trim()) continue;
           for (const line of cell.split(/\r?\n/)) {
-            const t = line.trim();
-            if (!t) continue;
-            let done = false, text = t;
-            if (text.startsWith('✓')) { done = true; text = text.slice(1).trim(); }
-            else if (text.startsWith('☐')) { text = text.slice(1).trim(); }
-            tasks[d].push({ id: uuid(), text, done });
+            let text = line.trim();
+            if (!text) continue;
+            if (text.startsWith('✓') || text.startsWith('☐')) text = text.slice(1).trim();
+            tasks[d].push(emptyTask(text));
           }
         }
         if (!weeks[wk]) weeks[wk] = [];
