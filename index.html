@@ -123,7 +123,7 @@
   thead .today .day-date { color: #ff385c; }
 
   .col-act { width: 36px; }
-  .col-role { width: 120px; min-width: 90px; }
+  .col-role { width: 120px; min-width: 90px; vertical-align: middle; }
   .col-goal { width: 220px; min-width: 160px; }
   .col-day { min-width: 145px; }
 
@@ -520,7 +520,25 @@ function renderTable() {
   const tbody = document.getElementById('planBody');
   tbody.innerHTML = '';
   const rows = getCurrentRows();
-  rows.forEach(row => tbody.appendChild(renderRow(row)));
+
+  let i = 0;
+  while (i < rows.length) {
+    let groupSize = 1;
+    // 같은 역할인 연속 행을 한 그룹으로 (빈 역할은 그룹화하지 않음)
+    while (
+      rows[i].role !== '' &&
+      i + groupSize < rows.length &&
+      rows[i + groupSize].role === rows[i].role
+    ) {
+      groupSize++;
+    }
+    tbody.appendChild(renderRow(rows[i], groupSize, true));
+    for (let j = 1; j < groupSize; j++) {
+      tbody.appendChild(renderRow(rows[i + j], 0, false));
+    }
+    i += groupSize;
+  }
+
   if (rows.length === 0) {
     const tr = document.createElement('tr');
     tr.innerHTML = '<td colspan="10" style="text-align:center;color:#929292;padding:32px;">역할이 없습니다. 좌측 상단 "+ 역할 추가" 버튼을 눌러 시작하세요.</td>';
@@ -528,7 +546,7 @@ function renderTable() {
   }
 }
 
-function renderRow(row) {
+function renderRow(row, groupSize, isHead) {
   const tr = document.createElement('tr');
   tr.dataset.rowId = row.id;
 
@@ -542,11 +560,33 @@ function renderRow(row) {
   tdAct.appendChild(delBtn);
   tr.appendChild(tdAct);
 
-  tr.appendChild(makeEditableCell(row.role, '역할', 'col-role', v => { row.role = v; touch(); }));
+  if (isHead) {
+    const roleCell = makeEditableCell(row.role, '역할', 'col-role', v => setRoleForGroup(row.id, v));
+    if (groupSize > 1) roleCell.rowSpan = groupSize;
+    tr.appendChild(roleCell);
+  }
   tr.appendChild(makeGoalCell(row));
 
   for (let i = 0; i < 7; i++) tr.appendChild(makeDayCell(row, i));
   return tr;
+}
+
+function setRoleForGroup(rowId, newRole) {
+  const rows = getCurrentRows();
+  const idx = rows.findIndex(r => r.id === rowId);
+  if (idx < 0) return;
+  const oldRole = rows[idx].role;
+  if (oldRole === newRole) return;
+  rows[idx].role = newRole;
+  // 같은 (옛) 역할을 가진 후속 연속 행도 함께 변경 (그룹 일관성 유지)
+  if (oldRole !== '') {
+    for (let j = idx + 1; j < rows.length; j++) {
+      if (rows[j].role !== oldRole) break;
+      rows[j].role = newRole;
+    }
+  }
+  touch();
+  render();
 }
 
 function makeGoalCell(row) {
