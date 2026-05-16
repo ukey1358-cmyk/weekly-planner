@@ -150,10 +150,6 @@
     transition: background 0.15s;
   }
   .task:hover { background: #f7f7f7; }
-  .task input[type="checkbox"] {
-    margin: 3px 0 0 0; cursor: pointer; flex-shrink: 0;
-    accent-color: #222222; width: 16px; height: 16px;
-  }
   .task-text {
     flex: 1; outline: none; word-break: break-word; cursor: text;
     padding: 1px 4px; border-radius: 4px; min-height: 20px; color: #222222;
@@ -661,15 +657,6 @@ function makeTaskElement(row, dayIdx, task) {
   const wrap = document.createElement('div');
   wrap.className = 'task' + (task.done ? ' done' : '');
 
-  const cb = document.createElement('input');
-  cb.type = 'checkbox';
-  cb.checked = !!task.done;
-  cb.onchange = () => {
-    task.done = cb.checked;
-    wrap.classList.toggle('done', task.done);
-    touch();
-  };
-
   const txt = document.createElement('div');
   txt.className = 'task-text';
   txt.contentEditable = 'true';
@@ -700,7 +687,6 @@ function makeTaskElement(row, dayIdx, task) {
     touch();
   };
 
-  wrap.appendChild(cb);
   wrap.appendChild(txt);
   wrap.appendChild(del);
   return wrap;
